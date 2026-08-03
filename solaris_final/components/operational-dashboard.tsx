@@ -43,20 +43,29 @@ export function OperationalDashboard({
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [autoPlay, setAutoPlay] = useState(false)
 
-  // Mirrors the latest inputs so the auto-play loop reads fresh non-hour values
-  // without re-subscribing its effect on every slider change.
-  const inputsRef = useRef(inputs)
-  inputsRef.current = inputs
+  const isMounted = useRef(true)
+  useEffect(() => {
+    isMounted.current = true
+    return () => {
+      isMounted.current = false
+    }
+  }, [])
 
-  // Load previously saved history from the backend once, on mount, so the
-  // log follows the user across reloads, browsers, and devices.
+  const inputsRef = useRef(inputs)
+  useEffect(() => {
+    inputsRef.current = inputs
+  }, [inputs])
+
+  // Load history on mount safely
   const hasLoadedHistory = useRef(false)
   useEffect(() => {
     if (hasLoadedHistory.current) return
     hasLoadedHistory.current = true
 
     fetchHistory().then((entries) => {
-      if (entries.length > 0) setHistory(entries.slice(0, MAX_HISTORY))
+      if (isMounted.current && entries?.length > 0) {
+        setHistory(entries.slice(0, MAX_HISTORY))
+      }
     })
   }, [])
 
@@ -66,7 +75,6 @@ export function OperationalDashboard({
       setError(null)
       onStatusChange('probing', null)
 
-      // Render's free tier idles out; flag the cold start once we cross it.
       const coldStart = setTimeout(
         () => onStatusChange('waking', null),
         COLD_START_THRESHOLD_MS,
@@ -76,24 +84,32 @@ export function OperationalDashboard({
         const { result: prediction, latencyMs: rtt } =
           await runPrediction(target)
 
+        if (!isMounted.current) return false
+
         setResult(prediction)
         setHasRun(true)
         setLatencyMs(rtt)
         onStatusChange('connected', rtt)
 
-        setHistory((prev) => {
-          const entry = {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            timestamp: Date.now(),
-            inputs: target,
-            result: prediction,
-            latencyMs: rtt,
-          }
-          void saveHistoryEntry(entry)
-          return [entry, ...prev].slice(0, MAX_HISTORY)
-        })
+        // Construct history entry clearly outside the state setter
+        const entry: HistoryEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          inputs: target,
+          result: prediction,
+          latencyMs: rtt,
+        }
+
+        // Save entry remotely explicitly
+        void saveHistoryEntry(entry).catch((err) =>
+          console.error('Failed to save history entry remote:', err),
+        )
+
+        // Update state cleanly without side effects inside setter
+        setHistory((prev) => [entry, ...prev].slice(0, MAX_HISTORY))
         return true
       } catch (err) {
+        if (!isMounted.current) return false
         setError(
           err instanceof Error
             ? err.message
@@ -103,14 +119,15 @@ export function OperationalDashboard({
         return false
       } finally {
         clearTimeout(coldStart)
-        setLoading(false)
+        if (isMounted.current) {
+          setLoading(false)
+        }
       }
     },
     [onStatusChange],
   )
 
-  // Auto-play steps hours 6→18 sequentially, waiting for each inference to
-  // resolve so slow cold-start responses can't stack up behind the interval.
+  // Auto-play loop
   useEffect(() => {
     if (!autoPlay) return
     let cancelled = false
@@ -128,10 +145,10 @@ export function OperationalDashboard({
           setTimeout(resolve, AUTOPLAY_INTERVAL_MS),
         )
       }
-      if (!cancelled) setAutoPlay(false)
+      if (!cancelled && isMounted.current) setAutoPlay(false)
     }
 
-    play()
+    void play()
     return () => {
       cancelled = true
     }
@@ -147,7 +164,6 @@ export function OperationalDashboard({
   const handleReset = useCallback(() => setInputs(DEFAULT_INPUTS), [])
 
   const handlePreset = useCallback((preset: ScenarioPreset) => {
-    // Presets without an explicit hour keep the current Hour of Day.
     setInputs((prev) => ({ ...prev, ...preset.values }))
   }, [])
 
@@ -170,7 +186,9 @@ export function OperationalDashboard({
 
   const handleClearHistory = useCallback(() => {
     setHistory([])
-    void clearHistoryRemote()
+    void clearHistoryRemote().catch((err) =>
+      console.error('Failed to clear remote history:', err),
+    )
   }, [])
 
   const factor = thermalLossFactor(inputs.module_temp)
@@ -213,7 +231,6 @@ export function OperationalDashboard({
 
         <MetricCards result={result} loading={loading} hasRun={hasRun} />
 
-        {/* Latency + live simulation readout */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border bg-card/40 px-4 py-2.5">
           <span className="flex items-center gap-1.5">
             <Timer className="size-3.5 text-accent" aria-hidden="true" />
