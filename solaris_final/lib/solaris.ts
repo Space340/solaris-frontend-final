@@ -1,7 +1,5 @@
 export const PREDICT_ENDPOINT =
   'https://solar-ai-backend-e7ws.onrender.com/predict'
-export const HISTORY_ENDPOINT =
-  'https://solar-ai-backend-e7ws.onrender.com/history'
 
 export type PredictionInputs = {
   irradiation: number
@@ -77,6 +75,8 @@ export const HOUR_MIN = 6
 export const HOUR_MAX = 18
 /** Render free tier cold-starts; past this we surface "Waking up…". */
 export const COLD_START_THRESHOLD_MS = 2500
+
+const LOCAL_STORAGE_KEY = 'solaris_history'
 
 /** Pulls the first present numeric field so the UI tolerates backend key drift. */
 function pickNumber(
@@ -179,43 +179,40 @@ export function cyclicalHour(hour: number) {
 }
 
 /**
- * Loads saved inference history from the backend (Postgres-backed), so the
- * log survives reloads and follows the user across devices/browsers. Fails
- * soft to an empty array — a sync hiccup shouldn't block the dashboard.
+ * Loads saved inference history from browser localStorage so history stays
+ * intact even after closing and reopening the browser window.
  */
 export async function fetchHistory(): Promise<HistoryEntry[]> {
+  if (typeof window === 'undefined') return []
   try {
-    const response = await fetch(HISTORY_ENDPOINT)
-    if (!response.ok) return []
-    const data = await response.json()
-    return Array.isArray(data) ? data : []
-  } catch {
+    const data = localStorage.getItem(LOCAL_STORAGE_KEY)
+    return data ? JSON.parse(data) : []
+  } catch (err) {
+    console.error('Failed to read history from localStorage:', err)
     return []
   }
 }
 
 /**
- * Persists one inference entry server-side. Fire-and-forget from the
- * caller's perspective: the entry already shows locally in `history`
- * regardless of whether this sync succeeds.
+ * Persists one inference entry into browser localStorage.
  */
 export async function saveHistoryEntry(entry: HistoryEntry): Promise<void> {
+  if (typeof window === 'undefined') return
   try {
-    await fetch(HISTORY_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entry),
-    })
-  } catch {
-    // Non-fatal — the entry still appears in the local session.
+    const existing = await fetchHistory()
+    const updated = [entry, ...existing].slice(0, 25)
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated))
+  } catch (err) {
+    console.error('Failed to save history entry to localStorage:', err)
   }
 }
 
-/** Clears the server-side history table. */
+/** Clears saved history entries from browser localStorage. */
 export async function clearHistoryRemote(): Promise<void> {
+  if (typeof window === 'undefined') return
   try {
-    await fetch(HISTORY_ENDPOINT, { method: 'DELETE' })
-  } catch {
-    // Non-fatal — local state is cleared regardless.
+    localStorage.removeItem(LOCAL_STORAGE_KEY)
+  } catch (err) {
+    console.error('Failed to clear history from localStorage:', err)
   }
 }
