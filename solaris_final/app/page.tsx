@@ -38,6 +38,7 @@ export default function SolarDashboard() {
   const [plantsData, setPlantsData] = useState<PlantInput[]>(INITIAL_PLANTS);
   const [predictions, setPredictions] = useState<PredictionResponse[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   const fleetChartRef = useRef<HTMLCanvasElement | null>(null);
   const diurnalChartRef = useRef<HTMLCanvasElement | null>(null);
@@ -49,6 +50,9 @@ export default function SolarDashboard() {
   const fetchFleetData = async () => {
     setLoading(true);
     try {
+      // Trigger a refresh in the child FleetPredictionsTable component
+      setRefreshTrigger((prev) => prev + 1);
+
       // Simulate slight weather fluctuations
       const updatedPlants = plantsData.map(p => ({
         ...p,
@@ -74,7 +78,7 @@ export default function SolarDashboard() {
       setPredictions(data);
     } catch (error) {
       console.error("API Fetch Error:", error);
-    } fontally {
+    } finally {
       setLoading(false);
     }
   };
@@ -270,7 +274,7 @@ export default function SolarDashboard() {
 
             {/* Embedded Fleet Predictions Database Log Table */}
             <div className="pt-4">
-              <FleetPredictionsTable />
+              <FleetPredictionsTable refreshTrigger={refreshTrigger} />
             </div>
           </section>
         )}
