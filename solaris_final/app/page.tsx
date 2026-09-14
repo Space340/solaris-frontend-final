@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
+import FleetPredictionsTable from '@/components/FleetPredictionsTable';
 
 interface PlantInput {
   plant_id: string;
@@ -73,7 +74,7 @@ export default function SolarDashboard() {
       setPredictions(data);
     } catch (error) {
       console.error("API Fetch Error:", error);
-    } finally {
+    } fontally {
       setLoading(false);
     }
   };
@@ -218,7 +219,7 @@ export default function SolarDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+      <main className="flex-1 p-6 md:p-8 overflow-y-auto space-y-8">
         {/* PAGE 1: DASHBOARD OVERVIEW */}
         {activeTab === 'dashboard' && (
           <section className="space-y-6">
@@ -244,7 +245,7 @@ export default function SolarDashboard() {
                 <span className="text-xs text-slate-500">255 MW Combined Capacity</span>
               </div>
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl">
-                <span class="text-xs text-slate-400 font-semibold uppercase">Avg Efficiency (CUF)</span>
+                <span className="text-xs text-slate-400 font-semibold uppercase">Avg Efficiency (CUF)</span>
                 <div className="text-2xl font-bold text-emerald-400 mt-2">{avgCuf.toFixed(1)} %</div>
                 <span className="text-xs text-slate-500">Fleet Utilization</span>
               </div>
@@ -265,6 +266,11 @@ export default function SolarDashboard() {
               <div className="h-64 relative">
                 <canvas ref={fleetChartRef}></canvas>
               </div>
+            </div>
+
+            {/* Embedded Fleet Predictions Database Log Table */}
+            <div className="pt-4">
+              <FleetPredictionsTable />
             </div>
           </section>
         )}
