@@ -12,9 +12,13 @@ interface PredictionRecord {
   timestamp: string;
 }
 
+interface FleetPredictionsTableProps {
+  refreshTrigger?: number; // Listens to refresh actions from app/page.tsx
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-export default function FleetPredictionsTable() {
+export default function FleetPredictionsTable({ refreshTrigger }: FleetPredictionsTableProps) {
   const [predictions, setPredictions] = useState<PredictionRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +42,7 @@ export default function FleetPredictionsTable() {
     fetchPredictions();
     const interval = setInterval(fetchPredictions, 30000); // Auto-refresh every 30s
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshTrigger]); // Re-fetches data whenever parent increments refreshTrigger
 
   return (
     <div className="w-full bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl text-slate-100">
