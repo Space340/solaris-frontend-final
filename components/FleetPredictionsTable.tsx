@@ -6,17 +6,16 @@ import { RefreshCw, Database, AlertCircle, Sun } from "lucide-react";
 interface PredictionRecord {
   id: number;
   plant_id: string;
-  irradiance: number;
-  temperature: number;
-  predicted_power_mw: number;
+  plant_name?: string;
+  irradiation?: number;
+  temperature?: number;
+  predicted_power_kw?: number;
   timestamp: string;
 }
 
 interface FleetPredictionsTableProps {
-  refreshTrigger?: number; // Listens to refresh actions from app/page.tsx
+  refreshTrigger?: number;
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export default function FleetPredictionsTable({ refreshTrigger }: FleetPredictionsTableProps) {
   const [predictions, setPredictions] = useState<PredictionRecord[]>([]);
@@ -27,10 +26,11 @@ export default function FleetPredictionsTable({ refreshTrigger }: FleetPredictio
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/predictions?limit=15`);
+      const res = await fetch("/api/analytics", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP error status: ${res.status}`);
-      const data: PredictionRecord[] = await res.json();
-      setPredictions(data);
+      const data = await res.json();
+      // Maps to your recentLogs array from Neon PostgreSQL
+      setPredictions(data.recentLogs || []);
     } catch (err: any) {
       setError(err.message || "Failed to load prediction logs.");
     } finally {
@@ -42,7 +42,7 @@ export default function FleetPredictionsTable({ refreshTrigger }: FleetPredictio
     fetchPredictions();
     const interval = setInterval(fetchPredictions, 30000); // Auto-refresh every 30s
     return () => clearInterval(interval);
-  }, [refreshTrigger]); // Re-fetches data whenever parent increments refreshTrigger
+  }, [refreshTrigger]);
 
   return (
     <div className="w-full bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl text-slate-100">
@@ -76,10 +76,10 @@ export default function FleetPredictionsTable({ refreshTrigger }: FleetPredictio
           <thead className="bg-slate-800/60 uppercase text-xs tracking-wider text-slate-400 border-b border-slate-800">
             <tr>
               <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Plant ID</th>
-              <th className="px-4 py-3">Irradiance (W/m²)</th>
-              <th className="px-4 py-3">Temp (°C)</th>
-              <th className="px-4 py-3">Output (MW)</th>
+              <th className="px-4 py-3">Plant</th>
+              <th className="px-4 py-3">Power Output</th>
+              <th className="px-4 py-3">Utilization</th>
+              <th className="px-4 py-3">Thermal Loss</th>
               <th className="px-4 py-3">Timestamp</th>
             </tr>
           </thead>
@@ -91,13 +91,17 @@ export default function FleetPredictionsTable({ refreshTrigger }: FleetPredictio
                   <td className="px-4 py-3 font-semibold text-white">
                     <span className="inline-flex items-center gap-1.5">
                       <Sun className="w-4 h-4 text-amber-400" />
-                      {row.plant_id.toUpperCase()}
+                      {row.plant_name || row.plant_id}
                     </span>
                   </td>
-                  <td className="px-4 py-3">{row.irradiance.toFixed(1)}</td>
-                  <td className="px-4 py-3">{row.temperature.toFixed(1)}</td>
                   <td className="px-4 py-3 font-mono text-emerald-400 font-semibold">
-                    {row.predicted_power_mw.toFixed(4)} MW
+                    {Math.round(row.predicted_power_kw || 0).toLocaleString()} kW
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.capacity_utilization_pct ? `${Number(row.capacity_utilization_pct).toFixed(1)}%` : "N/A"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.thermal_loss_percent ? `${row.thermal_loss_percent}%` : "N/A"}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-400">
                     {row.timestamp ? new Date(row.timestamp).toLocaleString() : "N/A"}
@@ -107,7 +111,7 @@ export default function FleetPredictionsTable({ refreshTrigger }: FleetPredictio
             ) : (
               <tr>
                 <td colSpan={6} className="text-center py-8 text-slate-500">
-                  {loading ? "Loading database logs..." : "No prediction logs found in Neon PostgreSQL."}
+                  {loading ? "Loading database logs..." : "No telemetry logs found in Neon PostgreSQL."}
                 </td>
               </tr>
             )}
