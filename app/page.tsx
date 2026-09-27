@@ -72,7 +72,6 @@ export default function SolarDashboard() {
 
           const directIrradKw = +(data.current.direct_normal_irradiance / 1000).toFixed(2);
           const ambTemp = +data.current.temperature_2m.toFixed(1);
-          // PV Thermal model: Module temp rises proportionally with irradiance
           const modTemp = +(ambTemp + (directIrradKw * 1000 * 0.022)).toFixed(1);
 
           return {
@@ -83,7 +82,6 @@ export default function SolarDashboard() {
             hour: currentHour
           };
         } catch (e) {
-          // Fallback to physics-based smooth drift if external API rate limits
           const deltaG = (Math.random() * 0.08) - 0.04;
           const newG = Math.min(1.0, Math.max(0.1, +(plant.irradiation + deltaG).toFixed(2)));
           return {
@@ -99,17 +97,18 @@ export default function SolarDashboard() {
     return updatedPlants;
   };
 
-  // Fetch telemetry predictions from Render ML API
+  // Fetch telemetry predictions from Render ML API & log to Neon DB
   const fetchFleetData = async () => {
     setLoading(true);
     setError(null);
     try {
       setRefreshTrigger((prev) => prev + 1);
 
-      // Fetch real telemetry from Open-Meteo
+      // 1. Fetch real telemetry from Open-Meteo
       const realTelemetryPlants = await fetchLiveWeatherTelemetry(plantsData);
       setPlantsData(realTelemetryPlants);
 
+      // 2. Call Render ML backend for predictions
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { 
@@ -124,6 +123,10 @@ export default function SolarDashboard() {
 
       const data: PredictionResponse[] = await response.json();
       setPredictions(data);
+
+      // 3. Automatically trigger your ingestion route to save these records to Neon!
+      await fetch('/api/ingest', { method: 'GET' });
+
     } catch (err: any) {
       console.error("API Fetch Error:", err);
       setError("Backend microservice unavailable or spinning up. Please try again in a moment.");
